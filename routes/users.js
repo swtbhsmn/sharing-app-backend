@@ -5,13 +5,12 @@ var passport = require('passport');
 const bodyParser = require('body-parser');
 const cors = require('../cors');
 var User = require('../models/user_model');
-
+var UserPosts = require('../models/post_model');
 var authentication = require('../authentication');
 router.use(bodyParser.json());
 
 const multer = require("multer");
-const { json } = require('express');
-const { verify } = require('jsonwebtoken');
+
 
 const storage = multer.diskStorage(
   {
@@ -78,20 +77,23 @@ router.route('/signup')
   });
 
   router.route('/login')
+  .options(cors.corsWithOptions, (req, res) => { res.statusCode = 200; })
   .post( cors.corsWithOptions, function(req, res, next) {
     passport.authenticate('local', function(err, user, info) {
       if (err) {
         return next(err);
       }
       if (!user) {
-        return res.status(401).json({
-          err: info
+        res.statusCode = 401;
+        res.setHeader('Content-Type', 'application/json');
+        return res.json({
+          success:false,errstatus:info.name
         });
       }
       req.login(user, function(err) {
         if (err) { return next(err); }
 
-        const token = authentication.getToken({ _id:user._id });
+        const token = authentication.getToken({ _id:user._id ,photo:`http://localhost:3001/profile_photo/${user.photo}`,username:user.username});
 
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
@@ -105,5 +107,58 @@ router.route('/signup')
     })(req,res,next);
   });
 
+  router.route('/add-post')
+  .options(cors.corsWithOptions, (req, res) => { res.statusCode = 200; })
+  .post(cors.corsWithOptions,authentication.verifyUser,(req,res,next)=>{
+
+    const data = new UserPosts({user_post_id:req.user._id,title:req.body.title,text:req.body.text,author:req.user.username});
+    data.save((err, user) => {
+      console.log(user);
+      if (err) {
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'application/json');
+        res.json({ err: err });
+        return;
+      }
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.json({ success: true, status: 'Your Post Created Successfully' });
+    });
+
+  });
+
+  router.route('/home')
+  .options(cors.cors, (req, res) => { res.statusCode = 200; })
+  .get(cors.cors,(req,res,next)=>{
+
+    UserPosts.find({}).then((post,err)=>{
+      if(err){return res.json(err)}
+
+      res.status=200;
+      return res.json(post);
+    })
+
+  });
+
+
+  router.route('/comment')
+  .options(cors.corsWithOptions, (req, res) => { res.statusCode = 200; })
+  .post(cors.corsWithOptions,authentication.verifyUser,(req,res,next)=>{
+
+    const data = new UserPosts({comments:{Comment:{text:req.body.text,author:req.user.username}}});
+    data.save((err, user) => {
+      console.log(user);
+      if (err) {
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'application/json');
+        res.json({ err: err });
+        return;
+      }
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.json({ success: true, status: 'Comment Updated.' });
+    });
+
+  });
 
  module.exports = router;
